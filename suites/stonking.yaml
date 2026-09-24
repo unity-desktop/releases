@@ -1,0 +1,22 @@
+# Source packages of the stonking suite, each from oci-packages/<source>:stonking.
+sources:
+  - wl-vapi-gen # unity-desktop/wl-vapi-gen
+
+  # unity-desktop/astal
+  - quarrel
+  - astal-io
+  - astal-gtk4
+  - astal-wl
+  - astal-wl4
+  - astal-apps
+  - astal-auth
+  - astal-battery
+  - astal-bluetooth
+  - astal-brightness
+  - astal-greet
+  - astal-idle-notify
+  - astal-mpris
+  - astal-network
+  - astal-notifd
+  - astal-power-profiles
+  - astal-wireplumber

@@ -3,43 +3,62 @@ name: unity-desktop releases flow
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Ubuntu series to publish
+        type: choice
+        options: [stonking]
+        default: stonking
 
 permissions:
   contents: read
-  packages: write
+
+concurrency:
+  group: apt-${{ inputs.suite }}
+
+env:
+  SUITE: ${{ inputs.suite }}
 
 jobs:
-  bootstrap:
-    name: ${{ matrix.suite }}
+  check:
+    name: Check ${{ inputs.suite }}
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        suite: [resolute, stonking]
+    outputs:
+      uploads: ${{ steps.check.outputs.uploads }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Check the uploads
+        id: check
+        run: uv run --locked --no-dev releases check "$SUITE"
+
+  publish:
+    name: Publish ${{ inputs.suite }}
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     env:
-      APT_REPO: ghcr.io/${{ github.repository_owner }}/ubuntu
-      SUITE: ${{ matrix.suite }}
+      RELEASES_USERNAME: ${{ github.actor }}
+      RELEASES_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
 
     defaults:
       run:
         shell: bash -euo pipefail {0}
 
     steps:
-      - uses: oras-project/setup-oras@v1
+      - uses: actions/checkout@v7
 
-      - name: Login to GHCR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ACTOR: ${{ github.actor }}
-        run: echo "$GH_TOKEN" | oras login ghcr.io --username "$ACTOR" --password-stdin
-
-      - name: Refuse to overwrite a published suite
-        run: |
-          if oras manifest fetch "$APT_REPO:$SUITE" > /dev/null 2>&1; then
-            echo "::error::$APT_REPO:$SUITE already exists"
-            exit 1
-          fi
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
 
       - name: Install aptly
         run: |
@@ -53,27 +72,23 @@ jobs:
           gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
           passphrase: ${{ secrets.GPG_PASSPHRASE }}
 
-      # aptly cannot infer architectures from an empty repository.
-      - name: Sign and assemble the repository
+      # Pull the digests that the check pinned, not the tags again.
+      - name: Pull the uploads
         env:
-          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          UPLOADS: ${{ needs.check.outputs.uploads }}
+        run: uv run --locked --no-dev releases pull "$UPLOADS" "$RUNNER_TEMP/uploads"
+
+      - name: Assemble and sign the repository
+        env:
           GPG_KEY: ${{ steps.gpg.outputs.fingerprint }}
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           aptly repo create -distribution="$SUITE" -component=main unity
-          aptly publish repo -batch \
-            -architectures=amd64,arm64,armhf,ppc64el,riscv64,s390x \
+          aptly repo add unity "$RUNNER_TEMP/uploads"
+          aptly publish repo -batch -architectures=amd64,source \
             -gpg-key="$GPG_KEY" -passphrase="$GPG_PASSPHRASE" unity
 
-      - name: Push
-        env:
-          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+      - name: Push the repository
         run: |
-          cd ~/.aptly/public
-          find . -type f | sort
-
-          # apt-transport-oci expects one layer per repository file.
-          mapfile -t files < <(find . -type f -printf '%p:application/octet-stream\n')
-
-          oras push \
-            --annotation "org.opencontainers.image.source=$SOURCE_URL" \
-            "$APT_REPO:$SUITE" "${files[@]}"
+          uv run --locked --no-dev releases push "$SUITE" "$HOME/.aptly/public" \
+            --tag "$SUITE-$(date -u +%Y%m%d).$GITHUB_RUN_NUMBER"
