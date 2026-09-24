@@ -5,7 +5,7 @@ Suite file and check results.
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, field_validator
 
 from releases.core.constants import SOURCE_NAME
 from releases.core.enums import Status
@@ -32,7 +32,7 @@ class Suite(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     name: str
-    sources: list[SourceName] = Field(min_length=1)
+    sources: list[SourceName] = []
 
     @field_validator("sources")
     @classmethod

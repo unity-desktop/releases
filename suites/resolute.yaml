@@ -1,0 +1,2 @@
+# No packages yet. Publish an empty signed repository, so apt sources for resolute work.
+sources: []

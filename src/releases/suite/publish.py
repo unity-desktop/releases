@@ -22,6 +22,8 @@ def pull_uploads(settings: Settings, uploads: list[Upload], directory: Path) -> 
         registry = Registry(settings.username, settings.password)
         return registry.pull(f"{settings.registry}/{upload.source}@{upload.digest}", directory)
 
+    # aptly needs the directory even for a suite with no packages.
+    directory.mkdir(parents=True, exist_ok=True)
     with ThreadPoolExecutor(WORKERS) as pool:
         list(pool.map(pull, uploads))
 

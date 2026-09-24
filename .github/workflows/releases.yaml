@@ -7,7 +7,7 @@ on:
       suite:
         description: Ubuntu series to publish
         type: choice
-        options: [stonking]
+        options: [stonking, resolute]
         default: stonking
 
 permissions:
