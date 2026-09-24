@@ -3,18 +3,19 @@ Registry access through oras-py.
 """
 
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http import HTTPStatus
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
+import oras.oci
 import oras.provider
-import oras.utils
 from loguru import logger
+from oras.container import Container
 from pydantic import SecretStr
 from requests import Response
 
-from releases.core.constants import FILE_TYPE, MANIFEST_TYPE, TITLE
+from releases.core.constants import FILE_TYPE, MANIFEST_TYPE, TITLE, WORKERS
 from releases.core.errors import RegistryError
 from releases.oci.models import Descriptor, Digest, Manifest
 
@@ -91,31 +92,43 @@ class Registry:
         Download each file of an artifact into a directory.
         """
         with failure(reference):
-            return [Path(file) for file in self._client.pull(reference, outdir=str(directory))]
+            files = [Path(file) for file in self._client.pull(reference, outdir=str(directory))]
+        logger.info("pulled {} files of {}", len(files), reference)
+        return files
 
     def push(self, directory: Path, target: str, annotations: dict[str, str]) -> Digest:
         """
         Push every file under a directory as one artifact. Return its digest.
         """
-        files = sorted(
-            path.relative_to(directory).as_posix()
-            for path in directory.rglob("*")
-            if path.is_file()
-        )
-        # apt-transport-oci reads the title as the file path. push() titles each
-        # layer with the base name, so give it the full path in an annotation file.
-        titles = {file: {TITLE: file} for file in files}
+        container = self._client.get_container(target)
+        files = sorted(path for path in directory.rglob("*") if path.is_file())
+        logger.info("pushing {} files to {}", len(files), target)
 
-        with TemporaryDirectory() as scratch, oras.utils.workdir(directory), failure(target):
-            annotation_file = oras.utils.write_json(titles, str(Path(scratch) / "titles.json"))
-            response = self._client.push(
-                target,
-                files=[f"{file}:{FILE_TYPE}" for file in files],
-                annotation_file=annotation_file,
-                manifest_annotations=annotations,
-                quiet=True,
-            )
-        return Digest(response.headers["Docker-Content-Digest"])
+        # push() uploads one file at a time, so build the same manifest in parallel.
+        with failure(target), ThreadPoolExecutor(WORKERS) as pool:
+            layers = list(pool.map(lambda path: self._upload(container, directory, path), files))
+            config, _ = oras.oci.ManifestConfig()
+            with oras.provider.temporary_empty_config() as config_file:
+                checked(target, self._client.upload_blob(config_file, container, config))
+            manifest = oras.oci.NewManifest() | {
+                "config": config,
+                "layers": layers,
+                "annotations": annotations,
+            }
+            response = checked(target, self._client.upload_manifest(manifest, container))
+
+        digest = Digest(response.headers["Docker-Content-Digest"])
+        logger.info("pushed {} as {}", target, digest)
+        return digest
+
+    def _upload(self, container: Container, directory: Path, path: Path) -> dict:
+        # apt-transport-oci reads the title as the file path.
+        title = path.relative_to(directory).as_posix()
+        layer = oras.oci.NewLayer(str(path), media_type=FILE_TYPE)
+        layer["annotations"] = {TITLE: title}
+        checked(title, self._client.upload_blob(str(path), container, layer))
+        logger.debug("uploaded {}", title)
+        return layer
 
     def tag(self, reference: str, target: str) -> None:
         """
@@ -125,3 +138,4 @@ class Registry:
             manifest = self._client.get_manifest(reference, allowed_media_type=[MANIFEST_TYPE])
             response = self._client.upload_manifest(manifest, self._client.get_container(target))
         checked(target, response)
+        logger.info("tagged {}", target)

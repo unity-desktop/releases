@@ -77,9 +77,7 @@ def pull(uploads: str, directory: Path) -> None:
     """
     Download each upload in the UPLOADS JSON from check into DIRECTORY.
     """
-    pulled = pull_uploads(registry(), get_settings(), UPLOADS.validate_json(uploads), directory)
-    for source, files in pulled.items():
-        console.print(f"[bold]{source}[/bold]: {len(files)} files")
+    pull_uploads(get_settings(), UPLOADS.validate_json(uploads), directory)
 
 
 @app.command()
@@ -89,8 +87,5 @@ def push(suite: str, directory: Path, tag: list[str] | None = None) -> None:
     """
     settings = get_settings()
     github = GitHub()
-    tags = tag or []
-    digest = push_repository(registry(), settings, suite, directory, tags, github.annotations)
-    for name in [suite, *tags]:
-        console.print(f"pushed [bold]{settings.repository}:{name}[/bold]")
+    digest = push_repository(registry(), settings, suite, directory, tag or [], github.annotations)
     github.set_output("digest", digest)

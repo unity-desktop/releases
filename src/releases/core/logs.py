@@ -7,19 +7,12 @@ import sys
 import oras.logger
 from loguru import logger
 
-from releases.core.constants import APP
-
 
 def configure(verbose: bool) -> None:
     """
-    Log to stderr when verbose. Stay quiet otherwise.
+    Log progress to stderr. Add debug logs when verbose.
     """
-    # Drop the stderr sink that loguru adds on import.
+    # Replace the stderr sink that loguru adds on import.
     logger.remove()
+    logger.add(sys.stderr, level="DEBUG" if verbose else "INFO")
     oras.logger.setup_logger(quiet=not verbose, debug=verbose)
-    if not verbose:
-        logger.disable(APP)
-        return
-
-    logger.enable(APP)
-    logger.add(sys.stderr, level="DEBUG")

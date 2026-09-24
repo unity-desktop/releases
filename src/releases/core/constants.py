@@ -2,7 +2,6 @@
 Constants.
 """
 
-APP = "releases"
 SUITES_DIR = "suites"
 
 REGISTRY = "ghcr.io/unity-desktop/oci-packages"
@@ -12,6 +11,9 @@ OWNER = "https://github.com/unity-desktop"
 UPLOAD_TYPE = "application/vnd.debian.upload.v1"
 MANIFEST_TYPE = "application/vnd.oci.image.manifest.v1+json"
 FILE_TYPE = "application/octet-stream"
+
+# Parallel registry transfers.
+WORKERS = 16
 
 TITLE = "org.opencontainers.image.title"
 SOURCE = "org.opencontainers.image.source"

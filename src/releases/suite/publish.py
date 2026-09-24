@@ -2,26 +2,28 @@
 Pull uploads and push the repository.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from releases.core.config import Settings
+from releases.core.constants import WORKERS
 from releases.oci.models import Digest
 from releases.oci.registry import Registry
 from releases.suite.models import Upload
 
 
-def pull_uploads(
-    registry: Registry, settings: Settings, uploads: list[Upload], directory: Path
-) -> dict[str, list[Path]]:
+def pull_uploads(settings: Settings, uploads: list[Upload], directory: Path) -> None:
     """
-    Download each upload by digest. Return the files of each source.
+    Download each upload by digest, in parallel.
     """
-    return {
-        upload.source: registry.pull(
-            f"{settings.registry}/{upload.source}@{upload.digest}", directory
-        )
-        for upload in uploads
-    }
+
+    # One client for each upload: each repository needs its own token.
+    def pull(upload: Upload) -> list[Path]:
+        registry = Registry(settings.username, settings.password)
+        return registry.pull(f"{settings.registry}/{upload.source}@{upload.digest}", directory)
+
+    with ThreadPoolExecutor(WORKERS) as pool:
+        list(pool.map(pull, uploads))
 
 
 def push_repository(
