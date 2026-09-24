@@ -20,3 +20,6 @@ sources:
   - astal-notifd
   - astal-power-profiles
   - astal-wireplumber
+
+  - wf-config # unity-desktop/wf-config
+  - wayfire # unity-desktop/wayfire
