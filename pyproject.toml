@@ -1,0 +1,75 @@
+[project]
+name = "releases"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.14"
+authors = [{ name = "Muqtadir" }]
+keywords = ["apt", "debian", "oci", "ghcr", "aptly"]
+dependencies = [
+    "loguru>=0.7.3",
+    "oras>=0.2.43",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "python-debian>=1.1.1",
+    "pyyaml>=6.0.3",
+    "requests>=2.32",
+    "rich>=15.0.0",
+    "tabulate>=0.10.0",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+releases = "releases.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.12.15,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16",
+]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.ruff]
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", # pycodestyle
+    "F",      # pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "A",      # flake8-builtins
+    "C4",     # flake8-comprehensions
+    "PTH",    # flake8-use-pathlib
+    "SIM",    # flake8-simplify
+    "TID",    # flake8-tidy-imports
+    "S",      # flake8-bandit
+    "ANN",    # flake8-annotations
+    "D",      # pydocstyle
+    "RUF",    # ruff-specific
+]
+ignore = [
+    "D200", # docstrings always span lines
+    "D203", # conflicts with D211
+    "D212", # the summary goes on the second line (D213)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"src/releases/__init__.py" = ["D104"]
+"src/releases/__main__.py" = ["D100"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.format]
+docstring-code-format = true

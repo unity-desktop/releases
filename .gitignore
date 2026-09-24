@@ -1,0 +1,18 @@
+# Byte-compiled / optimised files
+__pycache__/
+*.py[cod]
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# Virtual environments
+.venv/
+
+# uv
+# uv.lock is committed on purpose: this is an application, not a library.
+.uv-cache/
+
+# Lint caches
+.ruff_cache/
