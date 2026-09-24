@@ -1,0 +1,79 @@
+---
+name: unity-desktop releases flow
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  bootstrap:
+    name: ${{ matrix.suite }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [resolute, stonking]
+
+    env:
+      APT_REPO: ghcr.io/${{ github.repository_owner }}/ubuntu
+      SUITE: ${{ matrix.suite }}
+
+    defaults:
+      run:
+        shell: bash -euo pipefail {0}
+
+    steps:
+      - uses: oras-project/setup-oras@v1
+
+      - name: Login to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$GH_TOKEN" | oras login ghcr.io --username "$ACTOR" --password-stdin
+
+      - name: Refuse to overwrite a published suite
+        run: |
+          if oras manifest fetch "$APT_REPO:$SUITE" > /dev/null 2>&1; then
+            echo "::error::$APT_REPO:$SUITE already exists"
+            exit 1
+          fi
+
+      - name: Install aptly
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends aptly
+
+      - name: Import the signing key
+        id: gpg
+        uses: crazy-max/ghaction-import-gpg@v7
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      # aptly cannot infer architectures from an empty repository.
+      - name: Sign and assemble the repository
+        env:
+          GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+          GPG_KEY: ${{ steps.gpg.outputs.fingerprint }}
+        run: |
+          aptly repo create -distribution="$SUITE" -component=main unity
+          aptly publish repo -batch \
+            -architectures=amd64,arm64,armhf,ppc64el,riscv64,s390x \
+            -gpg-key="$GPG_KEY" -passphrase="$GPG_PASSPHRASE" unity
+
+      - name: Push
+        env:
+          SOURCE_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          cd ~/.aptly/public
+          find . -type f | sort
+
+          # apt-transport-oci expects one layer per repository file.
+          mapfile -t files < <(find . -type f -printf '%p:application/octet-stream\n')
+
+          oras push \
+            --annotation "org.opencontainers.image.source=$SOURCE_URL" \
+            "$APT_REPO:$SUITE" "${files[@]}"
